@@ -5,3 +5,5 @@ out/
 *.iml
 .DS_Store
 .env
+soak/results/*
+!soak/results/.gitkeep

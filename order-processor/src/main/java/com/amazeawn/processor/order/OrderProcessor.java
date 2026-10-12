@@ -186,10 +186,13 @@ public class OrderProcessor {
 
     @Transactional
     public void reset(Commands.TestReset cmd) {
-        em.createNativeQuery("truncate table {h-schema}processed_orders, {h-schema}payments").executeUpdate();
-        // The API reseeded its catalog with fresh product ids; rows for the new ids arrive via product.upsert.
-        em.createNativeQuery("truncate table {h-schema}inventory").executeUpdate();
-        log.info("Processor state reset (stock level {} will apply as products are re-announced)", cmd.stockLevel());
+        // Only rows that predate the reset: product.upsert commands for the reseeded catalog may be
+        // consumed before or after this one, and their rows are all created after issuedAt.
+        int orders = em.createQuery("delete from ProcessedOrder o where o.createdAt < :t").setParameter("t", cmd.issuedAt()).executeUpdate();
+        int payments = em.createQuery("delete from Payment p where p.createdAt < :t").setParameter("t", cmd.issuedAt()).executeUpdate();
+        int inventory = em.createQuery("delete from Inventory i where i.createdAt < :t").setParameter("t", cmd.issuedAt()).executeUpdate();
+        log.info("Processor state reset: dropped {} orders, {} payments, {} inventory rows created before {} (stock level {} applies to re-announced products)",
+                orders, payments, inventory, cmd.issuedAt(), cmd.stockLevel());
     }
 
     private void emitStockLevels(List<UUID> productIds, String correlationId) {

@@ -116,13 +116,34 @@ curl -X POST "http://localhost:8080/api/v1/test/reset?stock=1000"
 docker compose --profile monitoring up --build
 ```
 
+## Taking over this system?
+
+Start with **[docs/SRE-HANDOVER.md](docs/SRE-HANDOVER.md)**: bring-up, soak acceptance criteria, alert
+catalogue, runbooks, production gaps, and prompts for operating it with AI agents.
+
+## Soak test (a steady operational day)
+
+A k6-driven, all-day steady-traffic run with Prometheus alert rules, a Grafana soak dashboard and a
+watchdog that records anomalies — see **[docs/SOAK-RUNBOOK.md](docs/SOAK-RUNBOOK.md)**.
+
+```bash
+scripts/soak.sh up          # app + monitoring
+scripts/soak.sh start 8h    # k6 soak in the background
+scripts/soak.sh watch       # anomaly watchdog
+scripts/soak.sh report      # afterwards
+scripts/soak.sh clean       # clean slate (containers, volumes, results)
+```
+
 ## Project layout
 
 ```
 common/           message contracts, AMQP topology, outbox relay, idempotent consumer support
 api/              Spring Boot API + static UI (src/main/resources/static)
 order-processor/  Spring Boot worker: inventory, payment simulator, command handlers
-docker-compose.yml, .env.example, monitoring/, scripts/smoke.sh
+soak/             k6 soak scenarios (k6/soak.js), watchdog (watch.py), results/
+monitoring/       Prometheus config + alert rules, Grafana dashboards, RabbitMQ plugin list
+docs/             SRE-HANDOVER.md, SOAK-RUNBOOK.md
+docker-compose.yml, .env.example, scripts/smoke.sh, scripts/soak.sh
 ```
 
 Build system: Gradle (wrapper included), Java 21 (auto-provisioned by the toolchain resolver if you only

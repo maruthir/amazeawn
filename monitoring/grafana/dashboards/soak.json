@@ -1,0 +1,116 @@
+{
+  "title": "Amazeawn soak",
+  "uid": "amazeawn-soak",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Firing alerts",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 5 },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [{ "expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)", "legendFormat": "firing" }]
+    },
+    {
+      "id": 2, "type": "stat", "title": "Stale PENDING orders",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 5 },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [{ "expr": "amazeawn_orders_stale_pending" }]
+    },
+    {
+      "id": 3, "type": "stat", "title": "DLQ depth",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 5 },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [{ "expr": "sum(rabbitmq_queue_messages_ready{queue=~\".*\\\\.dlq\"})" }]
+    },
+    {
+      "id": 4, "type": "stat", "title": "k6 orders stuck (total)",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 5 },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [{ "expr": "max(k6_orders_stuck_total) or vector(0)" }]
+    },
+    {
+      "id": 5, "type": "stat", "title": "k6 request failure rate",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 5 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 0.005 }, { "color": "red", "value": 0.01 } ] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [{ "expr": "max(k6_http_req_failed_rate) or vector(0)" }]
+    },
+    {
+      "id": 6, "type": "stat", "title": "Targets up",
+      "gridPos": { "x": 20, "y": 0, "w": 4, "h": 5 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [{ "expr": "sum by (job) (up)", "legendFormat": "{{job}}" }]
+    },
+    {
+      "id": 10, "type": "timeseries", "title": "Traffic: k6 requests/s and API requests/s",
+      "gridPos": { "x": 0, "y": 5, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "sum(rate(k6_http_reqs_total[1m]))", "legendFormat": "k6 sent" },
+        { "expr": "sum(rate(http_server_requests_seconds_count{application=\"amazeawn-api\",uri!~\"/actuator.*\"}[1m]))", "legendFormat": "api served" }
+      ]
+    },
+    {
+      "id": 11, "type": "timeseries", "title": "Latency: k6 p95/p99 and API p95 (s)",
+      "gridPos": { "x": 12, "y": 5, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        { "expr": "max(k6_http_req_duration_p95)", "legendFormat": "k6 p95" },
+        { "expr": "max(k6_http_req_duration_p99)", "legendFormat": "k6 p99" },
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{application=\"amazeawn-api\",uri!~\"/actuator.*\"}[1m])))", "legendFormat": "api p95" }
+      ]
+    },
+    {
+      "id": 12, "type": "timeseries", "title": "Orders: placed/s and outcomes/s",
+      "gridPos": { "x": 0, "y": 13, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "sum(rate(amazeawn_orders_placed_total[5m]))", "legendFormat": "placed" },
+        { "expr": "sum by (outcome) (rate(amazeawn_orders_outcome_total[5m]))", "legendFormat": "{{outcome}}" }
+      ]
+    },
+    {
+      "id": 13, "type": "timeseries", "title": "Order settlement time p95 (k6, s)",
+      "gridPos": { "x": 12, "y": 13, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        { "expr": "max(k6_order_settle_time_p95)", "legendFormat": "p95" },
+        { "expr": "max(k6_order_settle_time_avg)", "legendFormat": "avg" }
+      ]
+    },
+    {
+      "id": 14, "type": "timeseries", "title": "Orders by status",
+      "gridPos": { "x": 0, "y": 21, "w": 12, "h": 8 },
+      "targets": [{ "expr": "amazeawn_orders_by_status", "legendFormat": "{{status}}" }]
+    },
+    {
+      "id": 15, "type": "timeseries", "title": "Queue depth (ready messages)",
+      "gridPos": { "x": 12, "y": 21, "w": 12, "h": 8 },
+      "targets": [{ "expr": "rabbitmq_queue_messages_ready", "legendFormat": "{{queue}}" }]
+    },
+    {
+      "id": 16, "type": "timeseries", "title": "Outbox pending + consumer retries/s",
+      "gridPos": { "x": 0, "y": 29, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "amazeawn_outbox_pending", "legendFormat": "outbox {{application}}" },
+        { "expr": "sum by (queue) (rate(amazeawn_consumer_retried_total[5m]))", "legendFormat": "retries {{queue}}" }
+      ]
+    },
+    {
+      "id": 17, "type": "timeseries", "title": "Resources: heap used % and Hikari active",
+      "gridPos": { "x": 12, "y": 29, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "100 * sum by (application) (jvm_memory_used_bytes{area=\"heap\"}) / sum by (application) (jvm_memory_max_bytes{area=\"heap\"})", "legendFormat": "heap % {{application}}" },
+        { "expr": "hikaricp_connections_active", "legendFormat": "db active {{application}}" }
+      ]
+    },
+    {
+      "id": 18, "type": "table", "title": "Alert history (firing)",
+      "gridPos": { "x": 0, "y": 37, "w": 24, "h": 8 },
+      "targets": [{ "expr": "ALERTS{alertstate=\"firing\"}", "format": "table", "instant": false, "legendFormat": "{{alertname}}" }]
+    }
+  ]
+}

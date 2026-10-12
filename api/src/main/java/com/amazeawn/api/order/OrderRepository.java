@@ -32,6 +32,8 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     long countByStatus(OrderStatus status);
 
+    long countByStatusInAndCreatedAtBefore(List<OrderStatus> statuses, Instant before);
+
     @Query("select coalesce(sum(o.totalAmount), 0) from Order o where o.status in :statuses")
     BigDecimal sumTotalByStatusIn(List<OrderStatus> statuses);
 

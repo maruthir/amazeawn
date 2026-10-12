@@ -1,0 +1,117 @@
+# Alert rules for the soak run. Each one names a failure mode the long-running test is meant to expose.
+# Firing alerts show on the "Amazeawn soak" Grafana dashboard, at http://localhost:9090/alerts,
+# and are picked up by soak/watch.py.
+groups:
+  - name: amazeawn-availability
+    rules:
+      - alert: ApiDown
+        expr: up{job="api"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations: { summary: "API scrape target is down" }
+
+      - alert: ProcessorDown
+        expr: sum(up{job="order-processor"}) < 1 or absent(up{job="order-processor"})
+        for: 1m
+        labels: { severity: critical }
+        annotations: { summary: "No order-processor replica is up" }
+
+      - alert: RabbitMqDown
+        expr: up{job="rabbitmq"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations: { summary: "RabbitMQ metrics endpoint is down" }
+
+  - name: amazeawn-messaging
+    rules:
+      - alert: DeadLetteredMessages
+        expr: increase(amazeawn_consumer_dead_lettered_total[10m]) > 0
+        labels: { severity: critical }
+        annotations: { summary: "{{ $labels.queue }} dead-lettered {{ $labels.type }} messages" }
+
+      - alert: DeadLetterQueueNotEmpty
+        expr: rabbitmq_queue_messages_ready{queue=~".*\\.dlq"} > 0
+        for: 1m
+        labels: { severity: critical }
+        annotations: { summary: "{{ $labels.queue }} holds {{ $value }} messages" }
+
+      - alert: ConsumerRetries
+        expr: sum by (queue, type) (rate(amazeawn_consumer_retried_total[5m])) > 0.05
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "Sustained retries on {{ $labels.queue }} ({{ $labels.type }})" }
+
+      - alert: QueueBacklog
+        expr: rabbitmq_queue_messages_ready{queue!~".*\\.dlq"} > 500
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "{{ $labels.queue }} backlog is {{ $value }} (consumers not keeping up)" }
+
+      - alert: QueueWithoutConsumers
+        expr: rabbitmq_queue_consumers{queue!~".*\\.dlq"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations: { summary: "{{ $labels.queue }} has no consumers" }
+
+      - alert: OutboxBacklog
+        expr: amazeawn_outbox_pending > 500
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "{{ $labels.application }} outbox has {{ $value }} unpublished rows (relay stalled?)" }
+
+  - name: amazeawn-orders
+    rules:
+      - alert: StalePendingOrders
+        expr: amazeawn_orders_stale_pending > 0
+        for: 3m
+        labels: { severity: critical }
+        annotations: { summary: "{{ $value }} orders stuck in PENDING/CANCEL_REQUESTED > 2 min (lost message?)" }
+
+      - alert: NoOrdersPlaced
+        expr: sum(rate(amazeawn_orders_placed_total[10m])) == 0
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "No orders placed in 10 minutes while the soak should be running" }
+
+      - alert: OutOfStockRejections
+        expr: sum(rate(amazeawn_orders_outcome_total{outcome="rejected_out_of_stock"}[10m])) > 0.05
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "Steady out-of-stock rejections; restock is not keeping up" }
+
+  - name: amazeawn-http
+    rules:
+      - alert: HttpServerErrors
+        expr: |
+          sum(rate(http_server_requests_seconds_count{application="amazeawn-api",status=~"5.."}[5m]))
+            / sum(rate(http_server_requests_seconds_count{application="amazeawn-api"}[5m])) > 0.01
+        for: 5m
+        labels: { severity: critical }
+        annotations: { summary: "API 5xx rate above 1%" }
+
+      - alert: HttpLatencyHigh
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{application="amazeawn-api",uri!~"/actuator.*"}[5m]))) > 1
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "API p95 latency above 1s for 10 minutes" }
+
+  - name: amazeawn-resources
+    rules:
+      - alert: DbPoolStarvation
+        expr: hikaricp_connections_pending > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "{{ $labels.application }} threads waiting for a DB connection" }
+
+      - alert: JvmHeapHigh
+        expr: sum by (application, instance) (jvm_memory_used_bytes{area="heap"}) / sum by (application, instance) (jvm_memory_max_bytes{area="heap"}) > 0.9
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "{{ $labels.application }} heap above 90% for 10 minutes (leak?)" }
+
+      - alert: GcPressure
+        expr: sum by (application, instance) (rate(jvm_gc_pause_seconds_sum[5m])) > 0.2
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "{{ $labels.application }} spends >20% of time in GC" }

@@ -48,6 +48,8 @@ services:
       - "${RABBITMQ_MGMT_PORT:-15672}:15672"
     volumes:
       - rabbitdata:/var/lib/rabbitmq
+      # Adds the rabbitmq_prometheus plugin (metrics on :15692) for the monitoring profile.
+      - ./monitoring/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
       interval: 5s
@@ -134,8 +136,16 @@ services:
   prometheus:
     image: prom/prometheus:v2.54.1
     profiles: ["monitoring"]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-7d}
+      # Lets k6 push its metrics in (soak profile).
+      - --web.enable-remote-write-receiver
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - promdata:/prometheus
     ports:
       - "${PROMETHEUS_PORT:-9090}:9090"
     depends_on:
@@ -157,6 +167,42 @@ services:
     depends_on:
       - prometheus
 
+  # Soak test driver: docker compose --profile soak up k6   (see docs/SOAK-RUNBOOK.md, scripts/soak.sh)
+  k6:
+    image: grafana/k6:0.54.0
+    profiles: ["soak"]
+    environment:
+      BASE_URL: http://api:8080
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@amazeawn.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      SOAK_DURATION: ${SOAK_DURATION:-8h}
+      SOAK_USERS: ${SOAK_USERS:-50}
+      SOAK_BROWSE_RPS: ${SOAK_BROWSE_RPS:-5}
+      SOAK_ORDERS_PER_MIN: ${SOAK_ORDERS_PER_MIN:-30}
+      SOAK_ADMIN_INTERVAL_S: ${SOAK_ADMIN_INTERVAL_S:-30}
+      SOAK_RESTOCK_EVERY_MIN: ${SOAK_RESTOCK_EVERY_MIN:-60}
+      SOAK_RESTOCK_LEVEL: ${SOAK_RESTOCK_LEVEL:-1000}
+      SOAK_SETTLE_TIMEOUT_S: ${SOAK_SETTLE_TIMEOUT_S:-60}
+      # Metrics push to Prometheus; scripts/soak.sh sets K6_EXTRA_ARGS to "-o experimental-prometheus-rw" when monitoring is up.
+      K6_EXTRA_ARGS: ${K6_EXTRA_ARGS:-}
+      K6_PROMETHEUS_RW_SERVER_URL: http://prometheus:9090/api/v1/write
+      K6_PROMETHEUS_RW_TREND_STATS: p(95),p(99),avg,max
+      K6_PROMETHEUS_RW_PUSH_INTERVAL: 10s
+    volumes:
+      - ./soak/k6:/scripts:ro
+      - ./soak/results:/results
+    entrypoint: ["sh", "-c"]
+    command:
+      - >
+        exec k6 run $${K6_EXTRA_ARGS}
+        --summary-export /results/summary-$$(date +%Y%m%d-%H%M%S).json
+        --tag run=$$(date +%Y%m%d-%H%M%S)
+        /scripts/soak.js
+    depends_on:
+      api:
+        condition: service_healthy
+
 volumes:
   pgdata:
   rabbitdata:
+  promdata:

@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 
@@ -48,6 +49,7 @@ public class TestResetController {
                                      @RequestParam(defaultValue = "false") boolean dropCustomers) {
         int size = catalogSize != null ? catalogSize : props.seed().catalogSize();
         int level = stock != null ? stock : props.seed().initialStock();
+        Instant issuedAt = Instant.now(); // everything the processor created before this is stale
 
         // Native SQL does not pick up Hibernate's default_schema; {h-schema} expands to "api.".
         em.createNativeQuery("truncate table {h-schema}refunds, {h-schema}order_items, {h-schema}orders, {h-schema}idempotency_keys, "
@@ -63,7 +65,7 @@ public class TestResetController {
         em.clear();
 
         seeder.seed(size, level);
-        outbox.enqueue(new Commands.TestReset(UUID.randomUUID(), CorrelationId.current(), level));
+        outbox.enqueue(new Commands.TestReset(UUID.randomUUID(), CorrelationId.current(), level, issuedAt));
         return Map.of("status", "reset", "catalogSize", size, "stock", level, "dropCustomers", dropCustomers);
     }
 }

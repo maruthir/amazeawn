@@ -1,6 +1,7 @@
 package com.amazeawn.common.messaging;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -40,7 +41,12 @@ public final class Commands {
         @Override public String routingKey() { return Routing.INVENTORY_RESTOCK; }
     }
 
-    public record TestReset(UUID messageId, String correlationId, int stockLevel) implements Message {
+    /**
+     * Drops processor state created before {@code issuedAt}. Commands are consumed concurrently, so the
+     * reset cannot rely on arriving before the product.upsert commands that reseed inventory; the
+     * timestamp makes it order-independent.
+     */
+    public record TestReset(UUID messageId, String correlationId, int stockLevel, Instant issuedAt) implements Message {
         @Override public String routingKey() { return Routing.TEST_RESET; }
     }
 }

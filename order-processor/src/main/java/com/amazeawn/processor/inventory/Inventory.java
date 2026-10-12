@@ -26,13 +26,17 @@ public class Inventory {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "created_at", nullable = false)
+    private Instant createdAt;
+
     protected Inventory() {}
 
     public Inventory(UUID productId, String sku, int available) {
         this.productId = productId;
         this.sku = sku;
         this.available = available;
-        this.updatedAt = Instant.now();
+        this.createdAt = Instant.now();
+        this.updatedAt = this.createdAt;
     }
 
     public UUID getProductId() { return productId; }
