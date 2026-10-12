@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: amazeawn
+    folder: Amazeawn
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: api
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["api:8080"]
+
+  - job_name: order-processor
+    metrics_path: /actuator/prometheus
+    # Resolves every replica when the service is scaled.
+    dns_sd_configs:
+      - names: ["order-processor"]
+        type: A
+        port: 8081

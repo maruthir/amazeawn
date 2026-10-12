@@ -1,0 +1,11 @@
+.git
+.gradle
+**/build
+**/.gradle
+**/out
+.idea
+*.iml
+.env
+README.md
+scripts
+monitoring

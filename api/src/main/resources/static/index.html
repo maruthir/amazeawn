@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Amazeawn</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/shop">Amazeawn</a>
+    <nav>
+      <a href="#/shop" data-nav="shop">Shop</a>
+      <a href="#/cart" data-nav="cart">Cart <span id="cart-count" class="pill">0</span></a>
+      <a href="#/orders" data-nav="orders">Orders</a>
+      <a href="#/account" data-nav="account">Account</a>
+      <a href="#/admin" data-nav="admin" id="nav-admin" hidden>Admin</a>
+      <a href="/swagger-ui.html" target="_blank" rel="noopener">API docs</a>
+    </nav>
+    <div id="who" class="who"></div>
+  </header>
+
+  <main id="view" class="view"></main>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

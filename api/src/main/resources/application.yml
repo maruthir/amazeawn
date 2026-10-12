@@ -1,0 +1,99 @@
+server:
+  port: ${PORT:8080}
+  tomcat:
+    threads:
+      max: ${HTTP_MAX_THREADS:200}
+    accept-count: 500
+
+spring:
+  application:
+    name: amazeawn-api
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:amazeawn}
+    username: ${DB_USER:amazeawn}
+    password: ${DB_PASSWORD:amazeawn}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:16}
+      minimum-idle: 2
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: api
+        jdbc.batch_size: 50
+        order_inserts: true
+  flyway:
+    schemas: api
+    default-schema: api
+    create-schemas: true
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:amazeawn}
+    password: ${RABBITMQ_PASSWORD:amazeawn}
+    publisher-confirm-type: simple
+    publisher-returns: true
+    listener:
+      simple:
+        missing-queues-fatal: false
+  threads:
+    virtual:
+      enabled: true
+
+amazeawn:
+  auth:
+    jwt-secret: ${JWT_SECRET:change-me-to-a-long-random-secret-of-at-least-32-bytes}
+    access-ttl: ${JWT_ACCESS_TTL:PT15M}
+    refresh-ttl: ${JWT_REFRESH_TTL:P7D}
+    bcrypt-cost: ${AUTH_BCRYPT_COST:10}
+  admin:
+    email: ${ADMIN_EMAIL:admin@amazeawn.local}
+    password: ${ADMIN_PASSWORD:admin123}
+    name: ${ADMIN_NAME:Store Admin}
+  seed:
+    catalog-size: ${CATALOG_SIZE:500}
+    initial-stock: ${INITIAL_STOCK:1000}
+    categories: ${CATALOG_CATEGORIES:8}
+  fulfilment:
+    enabled: ${FULFILMENT_ENABLED:true}
+    ship-after: ${FULFILMENT_SHIP_AFTER:PT30S}
+    deliver-after: ${FULFILMENT_DELIVER_AFTER:PT60S}
+    poll-interval: ${FULFILMENT_POLL_INTERVAL:PT5S}
+  rate-limit:
+    enabled: ${RATE_LIMIT_ENABLED:false}
+    requests-per-second: ${RATE_LIMIT_RPS:50}
+    burst: ${RATE_LIMIT_BURST:100}
+  messaging:
+    consumer-concurrency: ${CONSUMER_CONCURRENCY:4}
+    prefetch: ${CONSUMER_PREFETCH:20}
+    max-attempts: ${CONSUMER_MAX_ATTEMPTS:3}
+    outbox-poll-ms: ${OUTBOX_POLL_MS:200}
+    outbox-batch-size: ${OUTBOX_BATCH_SIZE:200}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: alpha
+    tags-sorter: alpha
+
+logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%X{correlationId:-}] %logger{30} - %msg%n"
+  level:
+    com.amazeawn: ${LOG_LEVEL:INFO}

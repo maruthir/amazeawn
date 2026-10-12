@@ -1,0 +1,68 @@
+server:
+  port: ${PORT:8081}
+
+spring:
+  application:
+    name: amazeawn-order-processor
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:amazeawn}
+    username: ${DB_USER:amazeawn}
+    password: ${DB_PASSWORD:amazeawn}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:12}
+      minimum-idle: 2
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: processor
+  flyway:
+    schemas: processor
+    default-schema: processor
+    create-schemas: true
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:amazeawn}
+    password: ${RABBITMQ_PASSWORD:amazeawn}
+    publisher-confirm-type: simple
+    publisher-returns: true
+    listener:
+      simple:
+        missing-queues-fatal: false
+
+amazeawn:
+  payment:
+    latency-ms: ${PAYMENT_LATENCY_MS:50}
+    jitter-ms: ${PAYMENT_LATENCY_JITTER_MS:50}
+    failure-rate: ${PAYMENT_FAILURE_RATE:0.05}
+    approve-card: ${PAYMENT_APPROVE_CARD:4242424242424242}
+    decline-card: ${PAYMENT_DECLINE_CARD:4000000000000002}
+  messaging:
+    consumer-concurrency: ${CONSUMER_CONCURRENCY:8}
+    prefetch: ${CONSUMER_PREFETCH:20}
+    max-attempts: ${CONSUMER_MAX_ATTEMPTS:3}
+    outbox-poll-ms: ${OUTBOX_POLL_MS:200}
+    outbox-batch-size: ${OUTBOX_BATCH_SIZE:200}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%X{correlationId:-}] %logger{30} - %msg%n"
+  level:
+    com.amazeawn: ${LOG_LEVEL:INFO}

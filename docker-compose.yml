@@ -1,0 +1,162 @@
+name: amazeawn
+
+x-common-env: &common-env
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_NAME: ${DB_NAME:-amazeawn}
+  DB_USER: ${DB_USER:-amazeawn}
+  DB_PASSWORD: ${DB_PASSWORD:-amazeawn}
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: "5672"
+  RABBITMQ_USER: ${RABBITMQ_USER:-amazeawn}
+  RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-amazeawn}
+  CONSUMER_PREFETCH: ${CONSUMER_PREFETCH:-20}
+  CONSUMER_MAX_ATTEMPTS: ${CONSUMER_MAX_ATTEMPTS:-3}
+  OUTBOX_POLL_MS: ${OUTBOX_POLL_MS:-200}
+  OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-200}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:-amazeawn}
+      POSTGRES_USER: ${DB_USER:-amazeawn}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-amazeawn}
+    command: >
+      postgres -c max_connections=${PG_MAX_CONNECTIONS:-200}
+               -c shared_buffers=${PG_SHARED_BUFFERS:-256MB}
+               -c synchronous_commit=${PG_SYNC_COMMIT:-on}
+    # Host mapping defaults to 5433 so it does not collide with a locally installed Postgres.
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-amazeawn} -d ${DB_NAME:-amazeawn}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-amazeawn}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-amazeawn}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+    volumes:
+      - rabbitdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    environment:
+      <<: *common-env
+      PORT: "8080"
+      SPRING_PROFILES_ACTIVE: ${API_PROFILES:-loadtest}
+      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-secret-of-at-least-32-bytes}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-PT15M}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-P7D}
+      AUTH_BCRYPT_COST: ${AUTH_BCRYPT_COST:-10}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@amazeawn.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      ADMIN_NAME: ${ADMIN_NAME:-Store Admin}
+      CATALOG_SIZE: ${CATALOG_SIZE:-500}
+      INITIAL_STOCK: ${INITIAL_STOCK:-1000}
+      CATALOG_CATEGORIES: ${CATALOG_CATEGORIES:-8}
+      FULFILMENT_ENABLED: ${FULFILMENT_ENABLED:-true}
+      FULFILMENT_SHIP_AFTER: ${FULFILMENT_SHIP_AFTER:-PT30S}
+      FULFILMENT_DELIVER_AFTER: ${FULFILMENT_DELIVER_AFTER:-PT60S}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-false}
+      RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-50}
+      RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-100}
+      DB_POOL_SIZE: ${API_DB_POOL_SIZE:-16}
+      HTTP_MAX_THREADS: ${API_HTTP_MAX_THREADS:-200}
+      CONSUMER_CONCURRENCY: ${API_CONSUMER_CONCURRENCY:-4}
+      JAVA_OPTS: ${API_JAVA_OPTS:--XX:MaxRAMPercentage=75}
+    ports:
+      - "${API_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: ${API_MEMORY:-1g}
+
+  order-processor:
+    build:
+      context: .
+      dockerfile: order-processor/Dockerfile
+    environment:
+      <<: *common-env
+      PORT: "8081"
+      PAYMENT_LATENCY_MS: ${PAYMENT_LATENCY_MS:-50}
+      PAYMENT_LATENCY_JITTER_MS: ${PAYMENT_LATENCY_JITTER_MS:-50}
+      PAYMENT_FAILURE_RATE: ${PAYMENT_FAILURE_RATE:-0.05}
+      DB_POOL_SIZE: ${PROCESSOR_DB_POOL_SIZE:-12}
+      CONSUMER_CONCURRENCY: ${PROCESSOR_CONSUMER_CONCURRENCY:-8}
+      JAVA_OPTS: ${PROCESSOR_JAVA_OPTS:--XX:MaxRAMPercentage=75}
+    # No host port mapping so `--scale order-processor=N` works; metrics are scraped on the compose network.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/actuator/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: ${PROCESSOR_MEMORY:-768m}
+
+  # Optional: docker compose --profile monitoring up
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    profiles: ["monitoring"]
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    depends_on:
+      - api
+      - order-processor
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    profiles: ["monitoring"]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  pgdata:
+  rabbitdata:
